@@ -5,15 +5,15 @@ int pin_dio0 = 2;
 int pin_nrst = 4;
 int pin_dio1 = 3;
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
-
+void setFlag(void);
 void setup() {
-  Serial.begin(115200);
   delay(500); //Wait for ESP32 to be able to print
 
   Serial.print(F("[SX1276] Initializing ... "));
   //int state = radio.begin(); //-121dBm
   //int state = radio.begin(868.0); //-20dBm
-  int state = radio.beginFSK(915.0,300); //-23dBm
+  int state = radio.beginFSK(915.0,20); //-23dBm
+  radio.disableAddressFiltering();
   if (state == RADIOLIB_ERR_NONE) {
     Serial.println(F("init success!"));
   } else {
@@ -34,56 +34,110 @@ void setup() {
   // controlled via two pins (RX enable, TX enable)
   // to enable automatic control of the switch,
   // call the following method
+  radio.setDio0Action(setFlag);
   int pin_rx_enable = 5;
   int pin_tx_enable = 6;
   radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
+    // start listening for LoRa packets
+  Serial.print(F("[SX1278] Starting to listen ... "));
+  state = radio.startReceive();
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println(F("success!"));
+  } else {
+    Serial.print(F("failed, code "));
+    Serial.println(state);
+    while (true);
+  }
 }
 
 int counter = 0;
 
-void loop() {
-  Serial.print(F("[SX1276] Transmitting packet ... "));
+// flag to indicate that a packet was received
+volatile bool receivedFlag = false;
 
-  // you can transmit C-string or Arduino string up to
-  // 256 characters long
-  // NOTE: transmit() is a blocking method!
-  //       See example SX127x_Transmit_Interrupt for details
-  //       on non-blocking transmission method.
+// disable interrupt when it's not needed
+volatile bool enableInterrupt = true;
 
-  // char output[50];
-  //sprintf(output, "Counter: %d", counter++);
-  String output = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaf c2 78 48 24 5f 03 36 ee d0 3b f5 fa 82 3f 87 e0 a4 7d 9e 85 e7 78 f9 f6 58 23 b2 2d ab 53 00 fd b2 a7 b5 d4 e5 12 69 27 ";
-  int state = radio.transmit(output);
-
-  // you can also transmit byte array up to 256 bytes long
-  /*
-    byte byteArr[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
-    int state = radio.transmit(byteArr, 8);
-  */
-
-  if (state == RADIOLIB_ERR_NONE) {
-    // the packet was successfully transmitted
-    Serial.println(F(" success!"));
-
-    // print measured data rate
-    Serial.print(F("[SX1276] Datarate:\t"));
-    Serial.print(radio.getDataRate());
-    Serial.println(F(" bps"));
-
-  } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
-    // the supplied packet was longer than 256 bytes
-    Serial.println(F("too long!"));
-
-  } else if (state == RADIOLIB_ERR_TX_TIMEOUT) {
-    // timeout occurred while transmitting packet
-    Serial.println(F("timeout!"));
-
-  } else {
-    // some other error occurred
-    Serial.print(F("failed, code "));
-    Serial.println(state);
+// this function is called when a complete packet
+// is received by the module
+// IMPORTANT: this function MUST be 'void' type
+//            and MUST NOT have any arguments!
+#if defined(ESP8266) || defined(ESP32)
+  ICACHE_RAM_ATTR
+#endif
+void setFlag(void) {
+  // check if the interrupt is enabled
+  if(!enableInterrupt) {
+    return;
   }
 
-  // wait for a second before transmitting again
-  delay(100);
+  // we got a packet, set the flag
+  receivedFlag = true;
+}
+
+
+void loop() {
+  // check if the flag is set
+  if(receivedFlag) {
+    // disable the interrupt service routine while
+    // processing the data
+    enableInterrupt = false;
+
+    // reset flag
+    receivedFlag = false;
+
+    // you can read received data as an Arduino String
+    String str;
+    int state = radio.readData(str);
+
+    // you can also read received data as byte array
+    /*
+      byte byteArr[8];
+      int state = radio.readData(byteArr, 8);
+    */
+
+    if (state == RADIOLIB_ERR_NONE) {
+      // packet was successfully received
+      Serial.println(F("[SX1278] Received packet!"));
+
+      // print data of the packet
+      Serial.print(F("[SX1278] Data:\t\t"));
+      Serial.print(str);
+      Serial.print("  ");
+      Serial.println(str.length());
+
+      // print RSSI (Received Signal Strength Indicator)
+      Serial.print(F("[SX1278] RSSI:\t\t"));
+      Serial.print(radio.getRSSI());
+      Serial.println(F(" dBm"));
+
+      // print SNR (Signal-to-Noise Ratio)
+      Serial.print(F("[SX1278] SNR:\t\t"));
+      Serial.print(radio.getSNR());
+      Serial.println(F(" dB"));
+
+      // print frequency error
+      Serial.print(F("[SX1278] Frequency error:\t"));
+      Serial.print(radio.getFrequencyError());
+      Serial.println(F(" Hz"));
+
+    } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
+      // packet was received, but is malformed
+      Serial.println(F("[SX1278] CRC error!"));
+
+    } else {
+      // some other error occurred
+      Serial.print(F("[SX1278] Failed, code "));
+      Serial.println(state);
+
+    }
+
+    // put module back to listen mode
+    radio.startReceive();
+
+    // we're ready to receive more packets,
+    // enable interrupt service routine
+    enableInterrupt = true;
+  }
+
 }
