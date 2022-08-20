@@ -8,7 +8,7 @@ SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
 void setFlag(void);
 void setup() {
   delay(500); //Wait for ESP32 to be able to print
-
+  Serial.begin(115200);
   Serial.print(F("[SX1276] Initializing ... "));
   //int state = radio.begin(); //-121dBm
   //int state = radio.begin(868.0); //-20dBm
@@ -97,52 +97,9 @@ void loop() {
     */
 
     if (state == RADIOLIB_ERR_NONE) {
-      // packet was successfully received
-      Serial.println(F("[SX1278] Received packet!"));
 
-      // print data of the packet
-      Serial.print(F("[SX1278] Data:\t\t"));
-      Serial.print(str);
-      Serial.print(" PACKET LENGTH: ");
-      Serial.println(str.length());
-      #ifdef VERBOSE
-        Serial.print("Parsed Strings:\n");
-        int spaceindex=str.indexOf(",");
-        String packv= str.substring(0,spaceindex);
-        Serial.printf("VOLTAGE PACKET: %s\n", (packv.toUpperCase()).c_str());
-        String invtemp=str.substring(spaceindex+1);
-        Serial.printf("TEMP PACKET: %s\n", (invtemp.toUpperCase()).c_str());
-        String volts = packv.substring(0,2);
-        int voltz = volts.toInt();
-        Serial.print(voltz);
-      #endif
-
-      // print RSSI (Received Signal Strength Indicator)
-      Serial.print(F("[SX1278] RSSI:\t\t"));
-      Serial.print(radio.getRSSI());
-      Serial.println(F(" dBm"));
-
-      // print SNR (Signal-to-Noise Ratio)
-      Serial.print(F("[SX1278] SNR:\t\t"));
-      Serial.print(radio.getSNR());
-      Serial.println(F(" dB"));
-
-      // print frequency error
-      Serial.print(F("[SX1278] Frequency error:\t"));
-      Serial.print(radio.getFrequencyError());
-      Serial.println(F(" Hz"));
-
-    } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
-      // packet was received, but is malformed
-      Serial.println(F("[SX1278] CRC error!"));
-
-    } else {
-      // some other error occurred
-      Serial.print(F("[SX1278] Failed, code "));
-      Serial.println(state);
-
+      Serial.println(str);
     }
-
     // put module back to listen mode
     radio.startReceive();
 
