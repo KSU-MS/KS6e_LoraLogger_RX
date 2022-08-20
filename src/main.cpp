@@ -103,17 +103,19 @@ void loop() {
       // print data of the packet
       Serial.print(F("[SX1278] Data:\t\t"));
       Serial.print(str);
-      Serial.print(" ");
+      Serial.print(" PACKET LENGTH: ");
       Serial.println(str.length());
-      Serial.print("Parsed Strings:\n");
-      int spaceindex=str.indexOf(",");
-      String packv= str.substring(0,spaceindex);
-      Serial.printf("VOLTAGE PACKET: %s\n", (packv.toUpperCase()).c_str());
-      String invtemp=str.substring(spaceindex+1);
-      Serial.printf("TEMP PACKET: %s\n", (invtemp.toUpperCase()).c_str());
-      String volts = packv.substring(0,2);
-      int voltz = volts.toInt();
-      Serial.println(voltz);
+      #ifdef VERBOSE
+        Serial.print("Parsed Strings:\n");
+        int spaceindex=str.indexOf(",");
+        String packv= str.substring(0,spaceindex);
+        Serial.printf("VOLTAGE PACKET: %s\n", (packv.toUpperCase()).c_str());
+        String invtemp=str.substring(spaceindex+1);
+        Serial.printf("TEMP PACKET: %s\n", (invtemp.toUpperCase()).c_str());
+        String volts = packv.substring(0,2);
+        int voltz = volts.toInt();
+        Serial.print(voltz);
+      #endif
 
       // print RSSI (Received Signal Strength Indicator)
       Serial.print(F("[SX1278] RSSI:\t\t"));
