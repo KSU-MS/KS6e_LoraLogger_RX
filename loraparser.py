@@ -129,13 +129,13 @@ def main():
     baudRate = 115200
     maxPlotLength = 10000     # number of points in x-axis of real time plot
     dataNumBytes = 2        # number of bytes of 1 data point
-    numPlots = 5            # number of plots in 1 graph
+    numPlots = 7            # number of plots in 1 graph
     s = serialPlot(portName, baudRate, maxPlotLength, dataNumBytes, numPlots)   # initializes all required variables
     s.readSerialStart()                                               # starts background thread
 
     # plotting starts below
     pltInterval = 100    # Period at which the plot animation updates [ms]
-    xmin = 0
+    xmin = maxPlotLength-100
     xmax = maxPlotLength
     ymin = -(1000)
     ymax = 5000
@@ -145,8 +145,8 @@ def main():
     ax.set_xlabel("Time")
     ax.set_ylabel("Data")
 
-    lineLabel = ['Accel 1', 'Accel 2', 'Brake','Motor Temp','Motor RPM']
-    style = ['r-', 'c-', 'b-','g-','y-']  # linestyles for the different plots
+    lineLabel = ['Accel 1', 'Accel 2', 'Brake','Motor Temp','Motor RPM','Pack Voltage','Torque Cmd']
+    style = ['r-', 'c-', 'b-','g-','y-','k-','m-']  # linestyles for the different plots
     timeText = ax.text(0.70, 0.95, '', transform=ax.transAxes)
     lines = []
     lineValueText = []
