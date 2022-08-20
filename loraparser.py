@@ -127,7 +127,7 @@ def main():
     portName = comportPrompt()
     # portName = '/dev/ttyUSB0'
     baudRate = 115200
-    maxPlotLength = 100     # number of points in x-axis of real time plot
+    maxPlotLength = 10000     # number of points in x-axis of real time plot
     dataNumBytes = 2        # number of bytes of 1 data point
     numPlots = 5            # number of plots in 1 graph
     s = serialPlot(portName, baudRate, maxPlotLength, dataNumBytes, numPlots)   # initializes all required variables
