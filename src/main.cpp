@@ -1,11 +1,21 @@
 #include <Arduino.h>
 #include <RadioLib.h>
+#include <Metro.h>
+//#define DEBUG
 int pin_cs = 10;
 int pin_dio0 = 2;
 int pin_nrst = 4;
 int pin_dio1 = 3;
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
+int packvoltage=0,invertercurrent=0,torquereq=0,motorrpm=0;
+int motortemp=0;
+int invertertemp=0;
+int accel1_=0,accel2_=0,brake1_=0;
+uint64_t invfaults=0;
+Metro sendToPcTimer = Metro(1);
+void sendToPC(int* data1, int* data2, int* data3, int* data4,int* data5);
 void setFlag(void);
+byte buf[10];
 void setup() {
   delay(500); //Wait for ESP32 to be able to print
   Serial.begin(115200);
@@ -39,10 +49,10 @@ void setup() {
   int pin_tx_enable = 6;
   radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
     // start listening for LoRa packets
-  Serial.print(F("[SX1278] Starting to listen ... "));
+  //Serial.print(F("[SX1278] Starting to listen ... "));
   state = radio.startReceive();
   if (state == RADIOLIB_ERR_NONE) {
-    Serial.println(F("success!"));
+    //Serial.println(F("success!"));
   } else {
     Serial.print(F("failed, code "));
     Serial.println(state);
@@ -89,7 +99,36 @@ void loop() {
     // you can read received data as an Arduino String
     String str;
     int state = radio.readData(str);
-
+    int spaceindex=str.indexOf(",");
+    packvoltage=(str.substring(0,spaceindex).toInt()); //Serial.println(packvoltage);
+      str=str.substring(spaceindex+1); //
+        spaceindex=str.indexOf(",");
+    motortemp=(str.substring(0,spaceindex).toInt()); //Serial.println(motortemp);
+      str=str.substring(spaceindex+1); //
+        spaceindex=str.indexOf(",");
+    invertertemp=(str.substring(0,spaceindex).toInt()); //Serial.println(invertertemp);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    invfaults=(str.substring(0,spaceindex).toInt()); //Serial.println(invfaults);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    accel1_=(str.substring(0,spaceindex).toInt()); //Serial.println(accel1_);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    accel2_=(str.substring(0,spaceindex).toInt()); //Serial.println(accel2_);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    brake1_=(str.substring(0,spaceindex).toInt()); //Serial.println(brake1_);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    invertercurrent=(str.substring(0,spaceindex).toInt()); //Serial.println(invertercurrent);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    torquereq=(str.substring(0,spaceindex).toInt()); //Serial.println(torquereq);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    motorrpm=(str.substring(0,spaceindex).toInt()); //Serial.println(motorrpm);
+      str=str.substring(spaceindex+1);
     // you can also read received data as byte array
     /*
       byte byteArr[8];
@@ -98,7 +137,7 @@ void loop() {
 
     if (state == RADIOLIB_ERR_NONE) {
 
-      Serial.println(str);
+      //Serial.println(str);
     }
     // put module back to listen mode
     radio.startReceive();
@@ -106,6 +145,26 @@ void loop() {
     // we're ready to receive more packets,
     // enable interrupt service routine
     enableInterrupt = true;
+    
   }
-
+  if(sendToPcTimer.check()){
+    sendToPC(&accel1_,&accel2_,&brake1_,&motortemp,&motorrpm);
+  }
+}
+void sendToPC(int* data1, int* data2, int* data3,int* data4,int* data5)
+{
+  #ifdef DEBUG
+  Serial.printf("%d, %d, %d\n",data1,data2,data3);
+  #endif
+  byte* byteData1 = (byte*)(data1);
+  byte* byteData2 = (byte*)(data2);
+  byte* byteData3 = (byte*)(data3);
+  byte* byteData4 = (byte*)(data4);
+  byte* byteData5 = (byte*)(data5);
+  byte buf[10] = {byteData1[0], byteData1[1],
+                 byteData2[0], byteData2[1],
+                 byteData3[0], byteData3[1],
+                 byteData4[0], byteData4[1],       
+                 byteData5[0], byteData5[1]};
+  Serial.write(buf, 10);
 }
