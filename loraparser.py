@@ -12,6 +12,7 @@ import pandas as pd
 import sys
 import glob
 import PySimpleGUI as sg 
+script_version = 'Version 1.0'
 def comportPrompt():
     layout = [  [sg.Text("enter Teensy com port #")],     # Part 2 - The Layout
             [sg.Text(serial_ports())],
@@ -129,7 +130,7 @@ def main():
     baudRate = 115200
     maxPlotLength = 10000     # number of points in x-axis of real time plot
     dataNumBytes = 2        # number of bytes of 1 data point
-    numPlots = 7            # number of plots in 1 graph
+    numPlots = 9            # number of plots in 1 graph
     s = serialPlot(portName, baudRate, maxPlotLength, dataNumBytes, numPlots)   # initializes all required variables
     s.readSerialStart()                                               # starts background thread
 
@@ -145,8 +146,8 @@ def main():
     ax.set_xlabel("Time")
     ax.set_ylabel("Data")
 
-    lineLabel = ['Accel 1', 'Accel 2', 'Brake','Motor Temp','Motor RPM','Pack Voltage','Torque Cmd']
-    style = ['r-', 'c-', 'b-','g-','y-','k-','m-']  # linestyles for the different plots
+    lineLabel = ['Accel 1', 'Accel 2', 'Brake','Motor Temp','Motor RPM','Pack Voltage','Torque Cmd','Inverter Temp','Inverter Current']
+    style = ['r-', 'c-', 'b-','g-','y-','k-','m-','C0-','C9-']  # linestyles for the different plots
     timeText = ax.text(0.70, 0.95, '', transform=ax.transAxes)
     lines = []
     lineValueText = []
@@ -163,5 +164,6 @@ def main():
 
 
 if __name__ == '__main__':
+    print(script_version)
     print(serial_ports())
     main()

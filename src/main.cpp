@@ -13,7 +13,7 @@ int invertertemp=0;
 int accel1_=0,accel2_=0,brake1_=0;
 uint64_t invfaults=0;
 Metro sendToPcTimer = Metro(1);
-void sendToPC(int* data1, int* data2, int* data3,int* data4,int* data5,int* data6,int* data7);
+void sendToPC(int* data1, int* data2, int* data3,int* data4,int* data5,int* data6,int* data7,int* data8,int* data9);
 void setFlag(void);
 byte buf[10];
 void setup() {
@@ -148,10 +148,10 @@ void loop() {
     
   }
   if(sendToPcTimer.check()){
-    sendToPC(&accel1_,&accel2_,&brake1_,&motortemp,&motorrpm,&packvoltage,&torquereq);
+    sendToPC(&accel1_,&accel2_,&brake1_,&motortemp,&motorrpm,&packvoltage,&torquereq,&invertertemp,&invertercurrent);
   }
 }
-void sendToPC(int* data1, int* data2, int* data3,int* data4,int* data5,int* data6,int* data7)
+void sendToPC(int* data1, int* data2, int* data3,int* data4,int* data5,int* data6,int* data7,int* data8,int* data9)
 {
   #ifdef DEBUG
   Serial.printf("%d, %d, %d\n",data1,data2,data3);
@@ -163,11 +163,16 @@ void sendToPC(int* data1, int* data2, int* data3,int* data4,int* data5,int* data
   byte* byteData5 = (byte*)(data5);
   byte* byteData6 = (byte*)(data6);
   byte* byteData7 = (byte*)(data7);
-  byte buf[14] = {byteData1[0], byteData1[1],
+  byte* byteData8 = (byte*)(data8);
+  byte* byteData9 = (byte*)(data9);
+  byte buf[18] = {byteData1[0], byteData1[1],
                  byteData2[0], byteData2[1],
                  byteData3[0], byteData3[1],
                  byteData4[0], byteData4[1],       
                  byteData5[0], byteData5[1],
-                 byteData6[0], byteData6[1],byteData7[0], byteData7[1]};
-  Serial.write(buf, 14);
+                 byteData6[0], byteData6[1],
+                 byteData7[0], byteData7[1],
+                 byteData8[0], byteData8[1],
+                 byteData9[0], byteData9[1]};
+  Serial.write(buf, 18);
 }
