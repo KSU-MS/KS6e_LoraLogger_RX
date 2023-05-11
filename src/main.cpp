@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <RadioLib.h>
-
+#include <Metro.h>
+//#define DEBUG
 int pin_cs = 10;
 int pin_dio0 = 16;
 int pin_nrst = 4;
@@ -8,14 +9,51 @@ int pin_dio1 = 17;
 int pin_rx_enable = 8;
 int pin_tx_enable = 9;
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
+int packvoltage=0,invertercurrent=0,torquereq=0,motorrpm=0;
+int motortemp=0;
+int invertertemp=0;
+int accel1_=0,accel2_=0,brake1_=0;
+int invfaults=0;
+Metro sendToPcTimer = Metro(10);
+void sendToPC(int* data1, int* data2, int* data3,int* data4,int* data5,int* data6,int* data7,int* data8,int* data9,int* data10);
+void setFlag(void);
+byte buf[10];
+
+
 
 void setup() {
   delay(500); //Wait for ESP32 to be able to print
   Serial.begin(115200);
-
-  // initialize SX1278 with default settings
   Serial.print(F("[SX1276] Initializing ... "));
-  int state = radio.begin(915.0);
+  //int state = radio.begin(); //-121dBm
+  //int state = radio.begin(868.0); //-20dBm
+  int state = radio.begin(915.0); //-23dBm
+  radio.disableAddressFiltering();
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println(F("init success!"));
+  } else {
+    Serial.print(F("failed, code "));
+    Serial.println(state);
+    while (true);
+  }
+
+  // set output power to 10 dBm (accepted range is -3 - 17 dBm)
+  // NOTE: 20 dBm value allows high power operation, but transmission
+  //       duty cycle MUST NOT exceed 1%
+  //  if (radio.setOutputPower(20) == ERR_INVALID_OUTPUT_POWER) {
+  //    Serial.println(F("Selected output power is invalid for this module!"));
+  //    while (true);
+  //  }
+
+  // some modules have an external RF switch
+  // controlled via two pins (RX enable, TX enable)
+  // to enable automatic control of the switch,
+  // call the following method
+  radio.setDio0Action(setFlag, RISING);
+  radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
+    // start listening for LoRa packets
+  Serial.print(F("[SX1276] Starting to listen ... "));
+  state = radio.startReceive();
   if (state == RADIOLIB_ERR_NONE) {
     Serial.println(F("success!"));
   } else {
@@ -23,163 +61,123 @@ void setup() {
     Serial.println(state);
     while (true);
   }
-  radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
+}
 
+int counter = 0;
 
-//   Serial.print(F("[SX1276] Initializing ... "));
-//   //int state = radio.begin(); //-121dBm
-//   //int state = radio.begin(868.0); //-20dBm
-//   int state = radio.begin(915.0); //-23dBm
-//   radio.disableAddressFiltering();
-//   if (state == RADIOLIB_ERR_NONE) {
-//     Serial.println(F("init success!"));
-//   } else {
-//     Serial.print(F("failed, code "));
-//     Serial.println(state);
-//     while (true);
-//   }
+// flag to indicate that a packet was received
+volatile bool receivedFlag = false;
 
-//   // set output power to 10 dBm (accepted range is -3 - 17 dBm)
-//   // NOTE: 20 dBm value allows high power operation, but transmission
-//   //       duty cycle MUST NOT exceed 1%
-// //  if (radio.setOutputPower(20) == ERR_INVALID_OUTPUT_POWER) {
-// //    Serial.println(F("Selected output power is invalid for this module!"));
-// //    while (true);
-// //  }
+// disable interrupt when it's not needed
+volatile bool enableInterrupt = true;
 
-//   // some modules have an external RF switch
-//   // controlled via two pins (RX enable, TX enable)
-//   // to enable automatic control of the switch,
-//   // call the following method
-//   radio.setDio0Action(setFlag);
-//   int pin_rx_enable = 8;
-//   int pin_tx_enable = 9;
-//   radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
-//     // start listening for LoRa packets
-//   Serial.print(F("[SX1276] Starting to listen ... "));
-//   state = radio.startReceive();
-//   if (state == RADIOLIB_ERR_NONE) {
-//     Serial.println(F("success!"));
-//   } else {
-//     Serial.print(F("failed, code "));
-//     Serial.println(state);
-//     while (true);
-//   }
-// }
+// this function is called when a complete packet
+// is received by the module
+// IMPORTANT: this function MUST be 'void' type
+//            and MUST NOT have any arguments!
+#if defined(ESP8266) || defined(ESP32)
+  ICACHE_RAM_ATTR
+#endif
+void setFlag(void) {
+  // check if the interrupt is enabled
+  if(!enableInterrupt) {
+    return;
+  }
 
-// int counter = 0;
-
-// // flag to indicate that a packet was received
-// volatile bool receivedFlag = false;
-
-// // disable interrupt when it's not needed
-// volatile bool enableInterrupt = true;
-
-// // this function is called when a complete packet
-// // is received by the module
-// // IMPORTANT: this function MUST be 'void' type
-// //            and MUST NOT have any arguments!
-// #if defined(ESP8266) || defined(ESP32)
-//   ICACHE_RAM_ATTR
-// #endif
-// void setFlag(void) {
-//   // check if the interrupt is enabled
-//   if(!enableInterrupt) {
-//     return;
-//   }
-
-//   // we got a packet, set the flag
-//   receivedFlag = true;
+  // we got a packet, set the flag
+  receivedFlag = true;
 }
 
 
 void loop() {
-   Serial.print(F("[SX1276] Waiting for incoming transmission ... "));
+  // check if the flag is set
+  if(receivedFlag) {
+    // disable the interrupt service routine while
+    // processing the data
+    enableInterrupt = false;
 
-  // you can receive data as an Arduino String
-  // NOTE: receive() is a blocking method!
-  //       See example ReceiveInterrupt for details
-  //       on non-blocking reception method.
-  String str;
-  int state = radio.receive(str);
+    // reset flag
+    receivedFlag = false;
 
-  // you can also receive data as byte array
-  /*
-    byte byteArr[8];
-    int state = radio.receive(byteArr, 8);
-  */
+    // you can read received data as an Arduino String
+    String str;
+    int state = radio.readData(str);
+    int spaceindex=str.indexOf(",");
+    packvoltage=(str.substring(0,spaceindex).toInt()); //Serial.println(packvoltage);
+      str=str.substring(spaceindex+1); //
+        spaceindex=str.indexOf(",");
+    motortemp=(str.substring(0,spaceindex).toInt()); //Serial.println(motortemp);
+      str=str.substring(spaceindex+1); //
+        spaceindex=str.indexOf(",");
+    invertertemp=(str.substring(0,spaceindex).toInt()); //Serial.println(invertertemp);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    invfaults=(str.substring(0,spaceindex).toInt()); //Serial.println(invfaults);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    accel1_=(str.substring(0,spaceindex).toInt()); //Serial.println(accel1_);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    accel2_=(str.substring(0,spaceindex).toInt()); //Serial.println(accel2_);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    brake1_=(str.substring(0,spaceindex).toInt()); //Serial.println(brake1_);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    invertercurrent=(str.substring(0,spaceindex).toInt()); //Serial.println(invertercurrent);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    torquereq=(str.substring(0,spaceindex).toInt()); //Serial.println(torquereq);
+      str=str.substring(spaceindex+1);
+        spaceindex=str.indexOf(",");
+    motorrpm=(str.substring(0,spaceindex).toInt()); //Serial.println(motorrpm);
+      str=str.substring(spaceindex+1);
+    // you can also read received data as byte array
+    /*
+      byte byteArr[8];
+      int state = radio.readData(byteArr, 8);
+    */
 
-  if (state == RADIOLIB_ERR_NONE) {
-    // packet was successfully received
-    Serial.println(F("success!"));
+    if (state == RADIOLIB_ERR_NONE) {
+      Serial.println("Recieved packet");
+      Serial.println(str);
+    }
+    // put module back to listen mode
+    radio.startReceive();
 
-    // print the data of the packet
-    Serial.print(F("[SX1276] Data:\t\t\t"));
-    Serial.println(str);
-
-    // print the RSSI (Received Signal Strength Indicator)
-    // of the last received packet
-    Serial.print(F("[SX1276] RSSI:\t\t\t"));
-    Serial.print(radio.getRSSI());
-    Serial.println(F(" dBm"));
-
-    // print the SNR (Signal-to-Noise Ratio)
-    // of the last received packet
-    Serial.print(F("[SX1276] SNR:\t\t\t"));
-    Serial.print(radio.getSNR());
-    Serial.println(F(" dB"));
-
-    // print frequency error
-    // of the last received packet
-    Serial.print(F("[SX1276] Frequency error:\t"));
-    Serial.print(radio.getFrequencyError());
-    Serial.println(F(" Hz"));
-
-  } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {
-    // timeout occurred while waiting for a packet
-    Serial.println(F("timeout!"));
-
-  } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
-    // packet was received, but is malformed
-    Serial.println(F("CRC error!"));
-
-  } else {
-    // some other error occurred
-    Serial.print(F("failed, code "));
-    Serial.println(state);
-
+    // we're ready to receive more packets,
+    // enable interrupt service routine
+    enableInterrupt = true;
+    
   }
-  
-  
-
-  // // check if the flag is set
-  // if(receivedFlag) {
-  //   // disable the interrupt service routine while
-  //   // processing the data
-  //   enableInterrupt = false;
-
-  //   // reset flag
-  //   receivedFlag = false;
-
-  //   // you can read received data as an Arduino String
-  //   String str;
-  //   int state = radio.readData(str);
-
-  //   // you can also read received data as byte array
-  //   /*
-  //     byte byteArr[8];
-  //     int state = radio.readData(byteArr, 8);
-  //   */
-
-  //   if (state == RADIOLIB_ERR_NONE) {
-
-  //     Serial.println(str);
-  //   }
-  //   // put module back to listen mode
-  //   radio.startReceive();
-
-  //   // we're ready to receive more packets,
-  //   // enable interrupt service routine
-  //   enableInterrupt = true;
-  // }
+  if(sendToPcTimer.check()){
+    sendToPC(&accel1_,&accel2_,&brake1_,&motortemp,&motorrpm,&packvoltage,&torquereq,&invertertemp,&invertercurrent,&invfaults);
+  }
+}
+void sendToPC(int* data1, int* data2, int* data3,int* data4,int* data5,int* data6,int* data7,int* data8,int* data9,int* data10)
+{
+  #ifdef DEBUG
+  Serial.printf("%d, %d, %d\n",data1,data2,data3);
+  #endif
+  byte* byteData1 = (byte*)(data1);
+  byte* byteData2 = (byte*)(data2);
+  byte* byteData3 = (byte*)(data3);
+  byte* byteData4 = (byte*)(data4);
+  byte* byteData5 = (byte*)(data5);
+  byte* byteData6 = (byte*)(data6);
+  byte* byteData7 = (byte*)(data7);
+  byte* byteData8 = (byte*)(data8);
+  byte* byteData9 = (byte*)(data9);
+  byte* byteData10 = (byte*)(data10);
+  byte buf[20] = {byteData1[0], byteData1[1],
+                 byteData2[0], byteData2[1],
+                 byteData3[0], byteData3[1],
+                 byteData4[0], byteData4[1],       
+                 byteData5[0], byteData5[1],
+                 byteData6[0], byteData6[1],
+                 byteData7[0], byteData7[1],
+                 byteData8[0], byteData8[1],
+                 byteData9[0], byteData9[1],
+                 byteData10[0], byteData10[1]};
+  Serial.write(buf, 20);
 }
